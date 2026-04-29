@@ -50,6 +50,8 @@ class WindowsAudioConfig:
     cable_capture_aliases: list[str] = field(
         default_factory=lambda: ["CABLE Output", "VB-Audio Virtual Cable"]
     )
+    personaplex_output_name: str = "Output (VB-Audio Point)"
+    personaplex_capture_name: str = "VB-Audio Point"
 
     @property
     def cable_capture_names(self) -> list[str]:

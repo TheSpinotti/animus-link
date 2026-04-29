@@ -10,7 +10,6 @@ import subprocess
 import threading
 
 import numpy as np
-import pyaudiowpatch as pyaudio
 import sounddevice as sd
 import websockets
 
@@ -39,32 +38,6 @@ _stats = {
 }
 
 
-def find_default_loopback() -> tuple[int, int]:
-    pa = pyaudio.PyAudio()
-    try:
-        info = pa.get_default_wasapi_loopback()
-        name = info["name"]
-        rate = int(info["defaultSampleRate"])
-        log.info("Default output loopback: %r @ %s Hz", name, rate)
-    finally:
-        pa.terminate()
-
-    clean = name.replace("[Loopback]", "").strip()
-    fragments = [clean]
-    if "(" in clean:
-        fragments.append(clean.split("(")[-1].rstrip(")").strip())
-    fragments.append(clean.split("(")[0].strip())
-    for word in clean.split():
-        if len(word) > 4 and word not in fragments:
-            fragments.append(word)
-
-    for frag in fragments:
-        for i, device in enumerate(sd.query_devices()):
-            if frag.lower() in device["name"].lower() and device["max_input_channels"] > 0:
-                log.info("Loopback device: [%s] %s", i, device["name"])
-                return i, int(device["default_samplerate"])
-    raise RuntimeError(f"Loopback device not found for: {name!r}")
-
 
 def build_personaplex_args(config: AppConfig) -> list[str]:
     return [
@@ -83,10 +56,8 @@ class Bridge:
         self._shutdown_event = shutdown_event
         self._personaplex_args = build_personaplex_args(config)
 
-        lb_idx, lb_rate = find_default_loopback()
-        log.info("Loopback capture: [%s] @ %s Hz", lb_idx, lb_rate)
-        self._lb_idx = lb_idx
-        self._lb_rate = lb_rate
+        pp_idx, pp_rate = find_sd_device(config.windows_audio.personaplex_capture_name, input=True)
+        log.info("PersonaPlex capture: [%s] @ %s Hz", pp_idx, pp_rate)
 
         ci_idx, ci_rate = find_sd_device(config.windows_audio.cable_input_name, input=False)
         log.info("CABLE Input: [%s] @ %s Hz", ci_idx, ci_rate)
@@ -98,7 +69,9 @@ class Bridge:
         self._co_idx = co_idx
         self._co_rate = co_rate
 
-        self._lb_to_wire = RateConverter(self._lb_rate, config.audio.sample_rate)
+        self._pp_idx = pp_idx
+        self._pp_rate = pp_rate
+        self._pp_to_wire = RateConverter(self._pp_rate, config.audio.sample_rate)
         self._wire_to_ci = RateConverter(config.audio.sample_rate, self._ci_rate)
 
         self._write_q: queue.Queue = queue.Queue(maxsize=8)
@@ -116,6 +89,7 @@ class Bridge:
             self.config.runtime.soundvolumeview_exe,
             self.config.windows_audio.cable_capture_id,
             self.config.windows_audio.cable_capture_names,
+            self.config.windows_audio.personaplex_output_name,
         )
         personaplex_exe = os.path.join(self.config.runtime.personaplex_dir, "personaplex.exe")
         log.info("Launching PersonaPlex...")
@@ -145,10 +119,10 @@ class Bridge:
             except Exception as e:
                 log.warning("CABLE Output monitor callback: %s", e)
 
-        def loopback_callback(indata, frames, time_info, status):
+        def capture_callback(indata, frames, time_info, status):
             try:
                 pcm_hw = indata[:, 0].astype(np.int16).tobytes()
-                pcm = self._lb_to_wire.convert(pcm_hw)
+                pcm = self._pp_to_wire.convert(pcm_hw)
                 pcm = apply_gain(pcm, audio.output_gain)
                 pcm = normalize_pcm_frame(pcm, audio.frame_samples)
                 _stats["out_peak"] = max(_stats["out_peak"], pcm_peak(pcm))
@@ -156,14 +130,14 @@ class Bridge:
             except Exception as e:
                 log.warning("capture callback: %s", e)
 
-        frame_size = int(self._lb_rate * audio.frame_ms / 1000)
+        frame_size = int(self._pp_rate * audio.frame_ms / 1000)
         self._stream = sd.InputStream(
-            device=self._lb_idx,
-            samplerate=self._lb_rate,
+            device=self._pp_idx,
+            samplerate=self._pp_rate,
             channels=1,
             dtype="int16",
             blocksize=frame_size,
-            callback=loopback_callback,
+            callback=capture_callback,
         )
         self._stream.start()
 

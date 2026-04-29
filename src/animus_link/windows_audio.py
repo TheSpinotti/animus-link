@@ -21,28 +21,46 @@ def force_personaplex_input(
     soundvolumeview_exe: str,
     cable_capture_id: str,
     cable_capture_names: list[str],
+    personaplex_output_name: str,
 ) -> None:
     if not os.path.exists(soundvolumeview_exe):
-        log.warning("SoundVolumeView not found; cannot force PersonaPlex input")
+        log.warning(
+            "SoundVolumeView not found at %r; cannot configure CABLE device. "
+            "Static may occur if 'Listen to this device' is enabled on CABLE Output.",
+            soundvolumeview_exe,
+        )
         return
 
-    commands = [
-        [soundvolumeview_exe, "/SetDefault", cable_capture_id, "all"],
-        [soundvolumeview_exe, "/SetAppDefault", cable_capture_id, "all", "personaplex.exe"],
-    ]
-    for name in cable_capture_names:
-        commands.append([soundvolumeview_exe, "/SetListenToThisDevice", name, "0"])
-
-    for command in commands:
+    def run_svv(*args: str) -> bool:
         try:
-            subprocess.run(
-                command,
+            result = subprocess.run(
+                [soundvolumeview_exe, *args],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
                 timeout=5,
                 check=False,
             )
         except Exception as e:
-            log.warning("SoundVolumeView failed: %s", e)
+            log.warning("SoundVolumeView %s raised: %s", args, e)
+            return False
+        if result.returncode != 0:
+            log.warning("SoundVolumeView %s returned %s", args, result.returncode)
+            return False
+        return True
+
+    run_svv("/SetDefault", cable_capture_id, "all")
+    run_svv("/SetAppDefault", cable_capture_id, "all", "personaplex.exe")
+    run_svv("/SetAppDefault", personaplex_output_name, "all", "personaplex.exe")
+
+    # If "Listen to this device" stays enabled on CABLE Output, the client's mic
+    # audio loops back through the default output and the loopback captures it,
+    # arriving at the client as static underneath PersonaPlex's voice.
+    listen_disabled = any(
+        run_svv("/SetListenToThisDevice", name, "0") for name in cable_capture_names
+    )
+    if not listen_disabled:
+        log.warning(
+            "Failed to disable 'Listen to this device' on CABLE Output — static may occur."
+        )
 
     log.info("Forced PersonaPlex capture default to CABLE Output")
