@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "animus-link"
+version = "0.1.0"
+description = "Remote low-latency audio bridge for PersonaPlex over a private network."
+requires-python = ">=3.11"
+dependencies = [
+  "numpy",
+  "sounddevice",
+  "websockets",
+]
+
+[project.optional-dependencies]
+server = ["pyaudiowpatch"]
+
+[project.scripts]
+animus-client = "animus_link.client:main"
+animus-bridge = "animus_link.bridge:main"
+animus-launcher = "animus_link.launcher:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

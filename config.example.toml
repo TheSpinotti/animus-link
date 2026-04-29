@@ -1,0 +1,30 @@
+[network]
+bridge_host = "0.0.0.0"
+bridge_port = 8998
+launcher_host = "0.0.0.0"
+launcher_port = 8997
+
+[runtime]
+personaplex_dir = "C:/AI/moshi.cpp/moshi-bin-win-x64-v0.8.0-beta"
+soundvolumeview_exe = "C:/AI/moshi.cpp/SoundVolumeView/SoundVolumeView.exe"
+
+[personaplex]
+voice = "NATF0"
+context = 1000
+prompt = "You are a casual, low-latency local voice assistant running on Matt's Windows PC."
+
+[audio]
+sample_rate = 24000
+frame_ms = 40
+input_gain = 4.0
+output_gain = 4.0
+client_mic_gain = 2.0
+client_play_gain = 2.0
+client_play_prebuffer_frames = 3
+client_play_max_queue_frames = 24
+
+[windows_audio]
+cable_input_name = "CABLE Input"
+cable_output_name = "CABLE Output"
+cable_capture_id = "VB-Audio Virtual Cable\\Device\\CABLE Output\\Capture"
+cable_capture_aliases = ["CABLE Output", "VB-Audio Virtual Cable"]
