@@ -16,8 +16,9 @@ prompt = "You are a casual, low-latency local voice assistant running on Matt's 
 [audio]
 sample_rate = 24000
 frame_ms = 40
+loopback_frame_ms = 10
 input_gain = 4.0
-output_gain = 4.0
+output_gain = 1.0
 client_mic_gain = 2.0
 client_play_gain = 2.0
 client_play_prebuffer_frames = 3
@@ -28,3 +29,5 @@ cable_input_name = "CABLE Input"
 cable_output_name = "CABLE Output"
 cable_capture_id = "VB-Audio Virtual Cable\\Device\\CABLE Output\\Capture"
 cable_capture_aliases = ["CABLE Output", "VB-Audio Virtual Cable"]
+personaplex_return_render_id = "{0.0.0.00000000}.{85D8AD2F-D7A3-4E35-9E82-61EF29C096D3}"
+personaplex_return_capture_name = "Speakers (Virtual Audio Driver by MTT) [Loopback]"

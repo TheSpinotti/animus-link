@@ -10,6 +10,7 @@ import subprocess
 import threading
 
 import numpy as np
+import pyaudiowpatch as pyaudio
 import sounddevice as sd
 import websockets
 
@@ -23,7 +24,11 @@ from animus_link.protocol import (
     MT_PING,
     make_msg,
 )
-from animus_link.windows_audio import find_sd_device, force_personaplex_input
+from animus_link.windows_audio import (
+    find_pyaudio_device,
+    find_sd_device,
+    force_personaplex_audio_route,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger("animus_link.bridge")
@@ -56,8 +61,26 @@ class Bridge:
         self._shutdown_event = shutdown_event
         self._personaplex_args = build_personaplex_args(config)
 
-        pp_idx, pp_rate = find_sd_device(config.windows_audio.personaplex_capture_name, input=True)
-        log.info("PersonaPlex capture: [%s] @ %s Hz", pp_idx, pp_rate)
+        self._pp_loopback = "[loopback]" in config.windows_audio.personaplex_return_capture_name.lower()
+        if self._pp_loopback:
+            pp_idx, pp_rate, pp_channels = find_pyaudio_device(
+                config.windows_audio.personaplex_return_capture_name,
+                input=True,
+            )
+            log.info(
+                "PersonaPlex loopback capture: [%s] channels=%s @ %s Hz",
+                pp_idx,
+                pp_channels,
+                pp_rate,
+            )
+            self._pp_channels = pp_channels
+        else:
+            pp_idx, pp_rate = find_sd_device(
+                config.windows_audio.personaplex_return_capture_name,
+                input=True,
+            )
+            log.info("PersonaPlex capture: [%s] @ %s Hz", pp_idx, pp_rate)
+            self._pp_channels = 1
 
         ci_idx, ci_rate = find_sd_device(config.windows_audio.cable_input_name, input=False)
         log.info("CABLE Input: [%s] @ %s Hz", ci_idx, ci_rate)
@@ -73,10 +96,12 @@ class Bridge:
         self._pp_rate = pp_rate
         self._pp_to_wire = RateConverter(self._pp_rate, config.audio.sample_rate)
         self._wire_to_ci = RateConverter(config.audio.sample_rate, self._ci_rate)
+        self._loopback_buf = np.zeros(0, dtype=np.int16)
 
         self._write_q: queue.Queue = queue.Queue(maxsize=8)
         self._out_q: asyncio.Queue | None = None
         self._stream = None
+        self._pa = None
         self._cable_monitor_stream = None
         self._personaplex: subprocess.Popen | None = None
 
@@ -85,11 +110,11 @@ class Bridge:
     def launch_personaplex(self):
         if self._personaplex and self._personaplex.poll() is None:
             return
-        force_personaplex_input(
+        force_personaplex_audio_route(
             self.config.runtime.soundvolumeview_exe,
             self.config.windows_audio.cable_capture_id,
             self.config.windows_audio.cable_capture_names,
-            self.config.windows_audio.personaplex_output_name,
+            self.config.windows_audio.personaplex_return_render_id,
         )
         personaplex_exe = os.path.join(self.config.runtime.personaplex_dir, "personaplex.exe")
         log.info("Launching PersonaPlex...")
@@ -98,6 +123,13 @@ class Bridge:
             cwd=self.config.runtime.personaplex_dir,
         )
         log.info("PersonaPlex PID: %s", self._personaplex.pid)
+        force_personaplex_audio_route(
+            self.config.runtime.soundvolumeview_exe,
+            self.config.windows_audio.cable_capture_id,
+            self.config.windows_audio.cable_capture_names,
+            self.config.windows_audio.personaplex_return_render_id,
+            process=str(self._personaplex.pid),
+        )
 
     def stop_personaplex(self):
         if self._personaplex and self._personaplex.poll() is None:
@@ -119,9 +151,8 @@ class Bridge:
             except Exception as e:
                 log.warning("CABLE Output monitor callback: %s", e)
 
-        def capture_callback(indata, frames, time_info, status):
+        def send_captured_pcm(pcm_hw: bytes):
             try:
-                pcm_hw = indata[:, 0].astype(np.int16).tobytes()
                 pcm = self._pp_to_wire.convert(pcm_hw)
                 pcm = apply_gain(pcm, audio.output_gain)
                 pcm = normalize_pcm_frame(pcm, audio.frame_samples)
@@ -131,15 +162,49 @@ class Bridge:
                 log.warning("capture callback: %s", e)
 
         frame_size = int(self._pp_rate * audio.frame_ms / 1000)
-        self._stream = sd.InputStream(
-            device=self._pp_idx,
-            samplerate=self._pp_rate,
-            channels=1,
-            dtype="int16",
-            blocksize=frame_size,
-            callback=capture_callback,
-        )
-        self._stream.start()
+        if self._pp_loopback:
+            self._pa = pyaudio.PyAudio()
+            loopback_frame_size = max(128, int(self._pp_rate * audio.loopback_frame_ms / 1000))
+
+            def loopback_callback(in_data, frame_count, time_info, status):
+                try:
+                    nonlocal frame_size
+                    samples = np.frombuffer(in_data, dtype=np.float32)
+                    samples = samples.reshape(-1, self._pp_channels).mean(axis=1)
+                    samples = np.clip(samples, -1.0, 1.0)
+                    samples_i16 = (samples * 32767.0).astype(np.int16)
+                    self._loopback_buf = np.concatenate([self._loopback_buf, samples_i16])
+                    while len(self._loopback_buf) >= frame_size:
+                        chunk = self._loopback_buf[:frame_size]
+                        self._loopback_buf = self._loopback_buf[frame_size:]
+                        send_captured_pcm(chunk.tobytes())
+                except Exception as e:
+                    log.warning("loopback callback: %s", e)
+                return (None, pyaudio.paContinue)
+
+            self._stream = self._pa.open(
+                format=pyaudio.paFloat32,
+                channels=self._pp_channels,
+                rate=self._pp_rate,
+                input=True,
+                input_device_index=self._pp_idx,
+                frames_per_buffer=loopback_frame_size,
+                stream_callback=loopback_callback,
+            )
+            self._stream.start_stream()
+        else:
+            def capture_callback(indata, frames, time_info, status):
+                send_captured_pcm(indata[:, 0].astype(np.int16).tobytes())
+
+            self._stream = sd.InputStream(
+                device=self._pp_idx,
+                samplerate=self._pp_rate,
+                channels=1,
+                dtype="int16",
+                blocksize=frame_size,
+                callback=capture_callback,
+            )
+            self._stream.start()
 
         cable_frame_size = int(self._co_rate * audio.frame_ms / 1000)
         self._cable_monitor_stream = sd.InputStream(
@@ -237,7 +302,13 @@ class Bridge:
 
     def stop(self):
         if self._stream:
-            self._stream.stop()
+            if self._pp_loopback:
+                self._stream.stop_stream()
+                self._stream.close()
+            else:
+                self._stream.stop()
+        if self._pa:
+            self._pa.terminate()
         if self._cable_monitor_stream:
             self._cable_monitor_stream.stop()
         self.stop_personaplex()

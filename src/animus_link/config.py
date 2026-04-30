@@ -30,8 +30,9 @@ class PersonaPlexConfig:
 class AudioConfig:
     sample_rate: int = 24000
     frame_ms: int = 40
+    loopback_frame_ms: int = 10
     input_gain: float = 4.0
-    output_gain: float = 4.0
+    output_gain: float = 1.0
     client_mic_gain: float = 2.0
     client_play_gain: float = 2.0
     client_play_prebuffer_frames: int = 3
@@ -50,8 +51,12 @@ class WindowsAudioConfig:
     cable_capture_aliases: list[str] = field(
         default_factory=lambda: ["CABLE Output", "VB-Audio Virtual Cable"]
     )
-    personaplex_output_name: str = "Output (VB-Audio Point)"
-    personaplex_capture_name: str = "VB-Audio Point"
+    personaplex_return_render_id: str = (
+        r"{0.0.0.00000000}.{85D8AD2F-D7A3-4E35-9E82-61EF29C096D3}"
+    )
+    personaplex_return_capture_name: str = (
+        "Speakers (Virtual Audio Driver by MTT) [Loopback]"
+    )
 
     @property
     def cable_capture_names(self) -> list[str]:
