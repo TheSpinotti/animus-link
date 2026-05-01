@@ -38,8 +38,26 @@ personaplex_return_capture_name = "Speakers (Virtual Audio Driver by MTT) [Loopb
 .\scripts\install-firewall-rules.ps1
 ```
 
-8. Start the launcher:
+8. Start the VRAM orchestrator:
 
 ```powershell
-.\scripts\start-launcher.ps1
+python orchestrator.py
+```
+
+The orchestrator listens on port `9001` and owns three states:
+
+- `default`: Gary's Ollama model is loaded and the Animus Link bridge is stopped.
+- `link`: Gary is unloaded and the Animus Link bridge is running for PersonaPlex.
+- `gaming`: Gary and Animus Link are both unloaded.
+
+Install it as the `AnimusOrchestrator` scheduled task on the Windows PC so it starts at login. The task should run:
+
+```powershell
+C:\Users\matse\AppData\Local\Programs\Python\Python311\python.exe orchestrator.py
+```
+
+with this start directory:
+
+```powershell
+D:\NorthernFrostbyte\animus-link
 ```
