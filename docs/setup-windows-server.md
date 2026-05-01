@@ -46,9 +46,9 @@ python orchestrator.py
 
 The orchestrator listens on port `9001` and owns three states:
 
-- `default`: Gary's Ollama model is loaded and the Animus Link bridge is stopped.
-- `link`: Gary is unloaded and the Animus Link bridge is running for PersonaPlex.
-- `gaming`: Gary and Animus Link are both unloaded.
+- `default`: an Ollama agent model is loaded and the Animus Link bridge is stopped.
+- `link`: an Ollama agent is unloaded and the Animus Link bridge is running for PersonaPlex.
+- `gaming`: an Ollama agent and Animus Link are both unloaded.
 
 Install it as the `AnimusOrchestrator` scheduled task on the Windows PC so it starts at login. The task should run:
 

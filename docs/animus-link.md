@@ -5,7 +5,7 @@ Animus Link connects the Android companion app to PersonaPlex running on the Win
 ## Requirements
 
 - Windows PC with a GPU shared by Ollama and PersonaPlex.
-- Ollama running on the Windows PC for Gary.
+- Ollama running on the Windows PC for an optional local agent.
 - PersonaPlex installed locally on the Windows PC.
 - VB-Audio Virtual Cable for PersonaPlex input.
 - Virtual Audio Driver by MTT for PersonaPlex return audio.
@@ -18,12 +18,12 @@ Animus Link connects the Android companion app to PersonaPlex running on the Win
 
 ## VRAM Orchestrator
 
-`orchestrator.py` prevents Gary and PersonaPlex from fighting over VRAM.
+`orchestrator.py` prevents an Ollama agent and PersonaPlex from fighting over VRAM.
 
 States:
 
-- `default`: Ollama/Gary loaded, Animus Link stopped.
-- `link`: Ollama/Gary unloaded, Animus Link bridge running.
+- `default`: Ollama agent loaded, Animus Link stopped.
+- `link`: Ollama agent unloaded, Animus Link bridge running.
 - `gaming`: both unloaded.
 
 API:
@@ -33,7 +33,7 @@ GET  /state
 POST /state {"state":"default|link|gaming"}
 ```
 
-The companion app enters `link` before connecting to PersonaPlex and returns to `default` when disconnecting. Gary's Ollama runtime enters `default` before sending a chat request.
+The companion app enters `link` before connecting to PersonaPlex and returns to `default` when disconnecting. An Ollama runtime enters `default` before sending a chat request.
 
 ## Source Of Truth
 
@@ -43,4 +43,4 @@ The companion app source of truth is `/home/kevin/Projects/animus-companion`.
 
 ## What Breaks Without It
 
-Without the orchestrator, Gary and PersonaPlex can load at the same time and exhaust GPU VRAM. PersonaPlex may fail to start, Gary may unload unexpectedly, or the first request after a mode switch may stall while Ollama tears down and recreates a runner.
+Without the orchestrator, an Ollama agent and PersonaPlex can load at the same time and exhaust GPU VRAM. PersonaPlex may fail to start, the Ollama agent may unload unexpectedly, or the first request after a mode switch may stall while Ollama tears down and recreates a runner.

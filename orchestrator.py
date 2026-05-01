@@ -1,6 +1,6 @@
 """
 Animus VRAM Orchestrator
-Manages GPU VRAM between Ollama (Gary) and Animus Link.
+Manages GPU VRAM between an Ollama agent and Animus Link.
 
 States:
   default - Ollama loaded, Animus Link stopped
@@ -24,9 +24,9 @@ from pathlib import Path
 PORT = 9001
 STATE_FILE = Path(__file__).parent / "state.json"
 OLLAMA_URL = "http://localhost:11434"
-GARY_MODEL = "qwen3.5"
-GARY_NUM_CTX = 40960
-GARY_THINKING = True
+OLLAMA_MODEL = "qwen3.5"
+OLLAMA_NUM_CTX = 40960
+OLLAMA_THINKING = True
 LINK_DIR = Path("D:/NorthernFrostbyte/animus-link")
 PYTHON_EXE = r"C:\Users\matse\AppData\Local\Programs\Python\Python311\python.exe"
 POWERSHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
@@ -57,7 +57,7 @@ def ollama_models():
 
 
 def ollama_loaded():
-    model_ref = GARY_MODEL.lower()
+    model_ref = OLLAMA_MODEL.lower()
     model_base = model_ref.split(":", 1)[0]
     for model in ollama_models():
         names = {
@@ -67,35 +67,35 @@ def ollama_loaded():
         bases = {name.split(":", 1)[0] for name in names if name}
         if model_ref in names or model_base in bases:
             loaded_ctx = model.get("context_length")
-            return loaded_ctx is None or int(loaded_ctx) >= GARY_NUM_CTX
+            return loaded_ctx is None or int(loaded_ctx) >= OLLAMA_NUM_CTX
     return False
 
 
 def ollama_unload():
     try:
-        data = json.dumps({"model": GARY_MODEL, "keep_alive": 0}).encode()
+        data = json.dumps({"model": OLLAMA_MODEL, "keep_alive": 0}).encode()
         req = urllib.request.Request(
             f"{OLLAMA_URL}/api/generate",
             data=data,
             headers={"Content-Type": "application/json"},
         )
         urllib.request.urlopen(req, timeout=15)
-        print(f"Ollama: {GARY_MODEL} unloaded", flush=True)
+        print(f"Ollama: {OLLAMA_MODEL} unloaded", flush=True)
     except Exception as e:
         print(f"Ollama unload warning: {e}", flush=True)
 
 
 def ollama_load():
     if ollama_loaded():
-        print(f"Ollama: {GARY_MODEL} already loaded", flush=True)
+        print(f"Ollama: {OLLAMA_MODEL} already loaded", flush=True)
         return
 
     try:
         data = json.dumps({
-            "model": GARY_MODEL,
+            "model": OLLAMA_MODEL,
             "keep_alive": -1,
-            "think": GARY_THINKING,
-            "options": {"num_ctx": GARY_NUM_CTX},
+            "think": OLLAMA_THINKING,
+            "options": {"num_ctx": OLLAMA_NUM_CTX},
             "messages": [],
             "stream": False,
         }).encode()
@@ -105,7 +105,7 @@ def ollama_load():
             headers={"Content-Type": "application/json"},
         )
         urllib.request.urlopen(req, timeout=120)
-        print(f"Ollama: {GARY_MODEL} loaded", flush=True)
+        print(f"Ollama: {OLLAMA_MODEL} loaded", flush=True)
     except Exception as e:
         print(f"Ollama load error: {e}", flush=True)
 
