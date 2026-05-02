@@ -31,6 +31,7 @@ LINK_DIR = Path("D:/NorthernFrostbyte/animus-link")
 PYTHON_EXE = r"C:\Users\matse\AppData\Local\Programs\Python\Python311\python.exe"
 POWERSHELL = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 LINK_CMD = [PYTHON_EXE, "-m", "animus_link.bridge", "--config", "config.toml"]
+NO_WINDOW = subprocess.CREATE_NO_WINDOW
 
 _link_proc = None
 _busy = False
@@ -120,7 +121,8 @@ def link_stop():
         try:
             pid = _link_proc.pid
             subprocess.run(["taskkill", "/F", "/T", "/PID", str(pid)],
-                           capture_output=True, timeout=10)
+                           capture_output=True, timeout=10,
+                           creationflags=NO_WINDOW)
             _link_proc.wait(timeout=10)
         except Exception as e:
             print(f"link_stop kill error: {e}", flush=True)
@@ -128,7 +130,7 @@ def link_stop():
     subprocess.run(
         [POWERSHELL, "-Command",
          "Get-WmiObject Win32_Process | Where-Object {$_.CommandLine -like '*animus_link.bridge*'} | ForEach-Object { taskkill /F /T /PID $_.ProcessId }"],
-        capture_output=True, timeout=10
+        capture_output=True, timeout=10, creationflags=NO_WINDOW
     )
     print("Animus Link: stopped", flush=True)
 
@@ -142,10 +144,10 @@ def link_start():
     subprocess.run(
         [POWERSHELL, "-Command",
          "Get-WmiObject Win32_Process | Where-Object {$_.CommandLine -like '*animus_link.bridge*'} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"],
-        capture_output=True
+        capture_output=True, creationflags=NO_WINDOW
     )
     _link_proc = subprocess.Popen(LINK_CMD, cwd=str(LINK_DIR),
-                                  creationflags=subprocess.CREATE_NO_WINDOW)
+                                  creationflags=NO_WINDOW)
     print(f"Animus Link: bridge started (pid {_link_proc.pid})", flush=True)
 
 

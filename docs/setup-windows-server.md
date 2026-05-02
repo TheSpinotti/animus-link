@@ -53,7 +53,7 @@ The orchestrator listens on port `9001` and owns three states:
 Install it as the `AnimusOrchestrator` scheduled task on the Windows PC so it starts at login. The task should run:
 
 ```powershell
-C:\Users\matse\AppData\Local\Programs\Python\Python311\python.exe orchestrator.py
+C:\Users\matse\AppData\Local\Programs\Python\Python311\pythonw.exe orchestrator.py
 ```
 
 with this start directory:
