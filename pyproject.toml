@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 server = ["pyaudiowpatch"]
+tray = ["pillow", "pystray"]
 
 [project.scripts]
 animus-client = "animus_link.client:main"

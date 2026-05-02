@@ -10,6 +10,7 @@ On GPU-constrained setups, the Windows PC can also run Ollama for an optional lo
 - `scripts/`: Windows/Linux convenience launchers
 - `docs/`: setup notes
 - `orchestrator.py`: Windows VRAM orchestrator for an Ollama agent, PersonaPlex, and gaming mode
+- `orchestrator_tray.py`: optional Windows tray controller for orchestrator state
 - `config.example.toml`: copy to `config.toml` and edit local paths/settings
 
 The PersonaPlex binary bundle is intentionally not stored in this repo. Point `config.toml` at the existing runtime folder.

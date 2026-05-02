@@ -5,6 +5,7 @@
 
 ```powershell
 pip install -e .[server]
+pip install -e .[tray]
 ```
 
 3. Install the virtual audio devices:
@@ -54,6 +55,18 @@ Install it as the `AnimusOrchestrator` scheduled task on the Windows PC so it st
 
 ```powershell
 C:\Users\matse\AppData\Local\Programs\Python\Python311\pythonw.exe orchestrator.py
+```
+
+with this start directory:
+
+```powershell
+D:\NorthernFrostbyte\animus-link
+```
+
+Optionally install the tray controller as a second login task. It gives the user a colored tray icon for state and a menu for changing modes. The task should run:
+
+```powershell
+C:\Users\matse\AppData\Local\Programs\Python\Python311\pythonw.exe orchestrator_tray.py
 ```
 
 with this start directory:
