@@ -74,3 +74,5 @@ with this start directory:
 ```powershell
 D:\NorthernFrostbyte\animus-link
 ```
+
+The tray menu can also update PersonaPlex voice presets under `PersonaPlex Voice`. The orchestrator writes the selected voice to `config.toml`; if Link mode is active, it restarts the bridge so PersonaPlex relaunches with the new voice.

@@ -10,9 +10,12 @@ States:
 HTTP API:
   GET  /state  -> {"state": "...", "busy": bool}
   POST /state  -> body: {"state": "..."}, returns {"ok": true} immediately
+  GET  /voice  -> {"voice": "...", "voices": [...]}
+  POST /voice  -> body: {"voice": "...", "restart_link": bool}, updates config.toml
 """
 
 import json
+import re
 import subprocess
 import threading
 import time
@@ -23,6 +26,7 @@ from pathlib import Path
 
 PORT = 9001
 STATE_FILE = Path(__file__).parent / "state.json"
+CONFIG_FILE = Path(__file__).parent / "config.toml"
 OLLAMA_URL = "http://localhost:11434"
 OLLAMA_MODEL = "qwen3.5"
 OLLAMA_NUM_CTX = 40960
@@ -37,6 +41,13 @@ _link_proc = None
 _busy = False
 _lock = threading.Lock()
 
+PERSONAPLEX_VOICES = [
+    "NATF0", "NATF1", "NATF2", "NATF3",
+    "NATM0", "NATM1", "NATM2", "NATM3",
+    "VARF0", "VARF1", "VARF2", "VARF3", "VARF4",
+    "VARM0", "VARM1", "VARM2", "VARM3", "VARM4",
+]
+
 
 def get_state():
     if STATE_FILE.exists():
@@ -46,6 +57,44 @@ def get_state():
 
 def save_state(state):
     STATE_FILE.write_text(json.dumps({"state": state}))
+
+
+def get_voice():
+    if not CONFIG_FILE.exists():
+        return "NATF0"
+    text = CONFIG_FILE.read_text()
+    match = re.search(
+        r'(?ms)^\[personaplex\]\s*.*?^voice\s*=\s*"([^"]+)"',
+        text,
+    )
+    return match.group(1) if match else "NATF0"
+
+
+def save_voice(voice):
+    if voice not in PERSONAPLEX_VOICES:
+        raise ValueError(f"Unknown PersonaPlex voice: {voice}")
+    if not CONFIG_FILE.exists():
+        raise FileNotFoundError(f"Missing config file: {CONFIG_FILE}")
+
+    text = CONFIG_FILE.read_text()
+    updated, count = re.subn(
+        r'(?ms)(^\[personaplex\]\s*.*?^voice\s*=\s*")[^"]+(")',
+        rf"\g<1>{voice}\2",
+        text,
+        count=1,
+    )
+    if count == 0:
+        updated = re.sub(
+            r'(?m)^\[personaplex\]\s*$',
+            f'[personaplex]\nvoice = "{voice}"',
+            text,
+            count=1,
+        )
+        if updated == text:
+            updated = text.rstrip() + f'\n\n[personaplex]\nvoice = "{voice}"\n'
+
+    CONFIG_FILE.write_text(updated)
+    print(f"PersonaPlex voice set to {voice}", flush=True)
 
 
 def ollama_models():
@@ -204,6 +253,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if self.path == "/state":
                 send_json(self, 200, {"state": get_state(), "busy": _busy})
+            elif self.path == "/voice":
+                send_json(self, 200, {"voice": get_voice(), "voices": PERSONAPLEX_VOICES})
             else:
                 self.send_response(404)
                 self.end_headers()
@@ -223,6 +274,21 @@ class Handler(BaseHTTPRequestHandler):
                     return
                 threading.Thread(target=transition, args=(new_state,), daemon=True).start()
                 send_json(self, 200, {"ok": True})
+            elif self.path == "/voice":
+                length = int(self.headers.get("Content-Length", 0))
+                raw = self.rfile.read(length) if length else b""
+                print(f"POST /voice body: {raw!r}", flush=True)
+                body = json.loads(raw)
+                voice = body.get("voice")
+                if not voice:
+                    send_json(self, 400, {"ok": False, "error": "missing voice"})
+                    return
+                save_voice(voice)
+                if body.get("restart_link", True) and get_state() == "link":
+                    link_stop()
+                    time.sleep(1)
+                    link_start()
+                send_json(self, 200, {"ok": True, "voice": get_voice()})
             else:
                 self.send_response(404)
                 self.end_headers()

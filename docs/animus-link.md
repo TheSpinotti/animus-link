@@ -26,6 +26,11 @@ States:
 - `link`: Ollama agent unloaded, Animus Link bridge running.
 - `gaming`: both unloaded.
 
+The orchestrator also exposes PersonaPlex voice control:
+
+- `GET /voice`: returns the current voice and available built-in PersonaPlex voice IDs.
+- `POST /voice`: accepts `{"voice": "NATF2", "restart_link": true}` and updates `config.toml`. When Link mode is active, the bridge restarts so PersonaPlex relaunches with the selected voice.
+
 API:
 
 ```text

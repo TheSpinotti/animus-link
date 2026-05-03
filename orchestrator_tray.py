@@ -37,6 +37,8 @@ STATE_LABELS = {
 
 state_lock = threading.Lock()
 current_state = "offline"
+current_voice = "NATF0"
+available_voices = []
 is_busy = False
 icon = None
 
@@ -81,16 +83,20 @@ def refresh_icon():
 
 
 def poll_state():
-    global current_state, is_busy
+    global current_state, current_voice, available_voices, is_busy
     while True:
         try:
             data = request_json("/state")
+            voice_data = request_json("/voice")
             with state_lock:
                 current_state = data.get("state", "offline")
+                current_voice = voice_data.get("voice", "NATF0")
+                available_voices = voice_data.get("voices", [])
                 is_busy = bool(data.get("busy"))
         except Exception:
             with state_lock:
                 current_state = "offline"
+                available_voices = []
                 is_busy = False
         refresh_icon()
         time.sleep(2)
@@ -121,6 +127,27 @@ def set_state(state):
 
 def set_state_background(state):
     threading.Thread(target=set_state, args=(state,), daemon=True).start()
+
+
+def set_voice(voice):
+    global current_voice, is_busy
+    try:
+        with state_lock:
+            is_busy = True
+        refresh_icon()
+        data = request_json("/voice", {"voice": voice, "restart_link": True}, timeout=15)
+        with state_lock:
+            current_voice = data.get("voice", voice)
+    except Exception as exc:
+        print(f"Failed to set voice {voice}: {exc}", flush=True)
+    finally:
+        with state_lock:
+            is_busy = False
+        refresh_icon()
+
+
+def set_voice_background(voice):
+    threading.Thread(target=set_voice, args=(voice,), daemon=True).start()
 
 
 def restart_orchestrator(_icon=None, _item=None):
@@ -155,15 +182,59 @@ def is_checked(state):
     return checked
 
 
+def is_voice_checked(voice):
+    def checked(_item):
+        with state_lock:
+            return current_voice == voice and not is_busy
+    return checked
+
+
+def voice_action(voice):
+    def action(_icon, _item):
+        set_voice_background(voice)
+    return action
+
+
+def voice_menu_items(prefix):
+    with state_lock:
+        voices = available_voices or [
+            "NATF0", "NATF1", "NATF2", "NATF3",
+            "NATM0", "NATM1", "NATM2", "NATM3",
+            "VARF0", "VARF1", "VARF2", "VARF3", "VARF4",
+            "VARM0", "VARM1", "VARM2", "VARM3", "VARM4",
+        ]
+    return [
+        pystray.MenuItem(
+            voice,
+            voice_action(voice),
+            checked=is_voice_checked(voice),
+        )
+        for voice in voices
+        if voice.startswith(prefix)
+    ]
+
+
 def build_menu():
     with state_lock:
         label = label_for(current_state, is_busy)
+        voice = current_voice
     return pystray.Menu(
         pystray.MenuItem(f"State: {label}", None, enabled=False),
+        pystray.MenuItem(f"Voice: {voice}", None, enabled=False),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Default", lambda _icon, _item: set_state_background("default"), checked=is_checked("default")),
         pystray.MenuItem("Link", lambda _icon, _item: set_state_background("link"), checked=is_checked("link")),
         pystray.MenuItem("Gaming", lambda _icon, _item: set_state_background("gaming"), checked=is_checked("gaming")),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem(
+            "PersonaPlex Voice",
+            pystray.Menu(
+                pystray.MenuItem("Natural Female", pystray.Menu(*voice_menu_items("NATF"))),
+                pystray.MenuItem("Natural Male", pystray.Menu(*voice_menu_items("NATM"))),
+                pystray.MenuItem("Varied Female", pystray.Menu(*voice_menu_items("VARF"))),
+                pystray.MenuItem("Varied Male", pystray.Menu(*voice_menu_items("VARM"))),
+            ),
+        ),
         pystray.Menu.SEPARATOR,
         pystray.MenuItem("Restart Orchestrator", restart_orchestrator),
         pystray.MenuItem("Restart Tray App", restart_tray),
