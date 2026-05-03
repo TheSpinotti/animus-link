@@ -8,6 +8,7 @@ import queue
 import struct
 import subprocess
 import threading
+import time
 
 import numpy as np
 import pyaudiowpatch as pyaudio
@@ -110,6 +111,7 @@ class Bridge:
     def launch_personaplex(self):
         if self._personaplex and self._personaplex.poll() is None:
             return
+        started_at = time.perf_counter()
         force_personaplex_audio_route(
             self.config.runtime.soundvolumeview_exe,
             self.config.windows_audio.cable_capture_id,
@@ -130,6 +132,7 @@ class Bridge:
             self.config.windows_audio.personaplex_return_render_id,
             process=str(self._personaplex.pid),
         )
+        log.info("PersonaPlex launch path completed in %.2fs", time.perf_counter() - started_at)
 
     def stop_personaplex(self):
         if self._personaplex and self._personaplex.poll() is None:
@@ -361,6 +364,7 @@ async def run_bridge(config: AppConfig):
     bridge = Bridge(config, shutdown_event=shutdown_event)
     loop = asyncio.get_running_loop()
     bridge.start_audio(loop)
+    bridge.launch_personaplex()
     host = config.network.bridge_host
     port = config.network.bridge_port
     log.info("Listening on ws://%s:%s", host, port)

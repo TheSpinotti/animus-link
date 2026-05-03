@@ -190,6 +190,7 @@ def link_start():
         print(f"Animus Link: bridge already running (pid {_link_proc.pid})", flush=True)
         return
 
+    started_at = time.perf_counter()
     subprocess.run(
         [POWERSHELL, "-Command",
          "Get-WmiObject Win32_Process | Where-Object {$_.CommandLine -like '*animus_link.bridge*'} | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"],
@@ -197,7 +198,10 @@ def link_start():
     )
     _link_proc = subprocess.Popen(LINK_CMD, cwd=str(LINK_DIR),
                                   creationflags=NO_WINDOW)
-    print(f"Animus Link: bridge started (pid {_link_proc.pid})", flush=True)
+    print(
+        f"Animus Link: bridge started (pid {_link_proc.pid}) in {time.perf_counter() - started_at:.2f}s",
+        flush=True,
+    )
 
 
 def transition(new_state):
@@ -210,6 +214,7 @@ def transition(new_state):
 
     try:
         current = get_state()
+        started_at = time.perf_counter()
         print(f"Transition: {current} -> {new_state}", flush=True)
 
         if new_state == "default":
@@ -228,7 +233,7 @@ def transition(new_state):
             raise ValueError(f"Unknown state: {new_state}")
 
         save_state(new_state)
-        print(f"State is now: {new_state}", flush=True)
+        print(f"State is now: {new_state} ({time.perf_counter() - started_at:.2f}s)", flush=True)
     except Exception as e:
         print(f"Transition error: {e}", flush=True)
         traceback.print_exc()
